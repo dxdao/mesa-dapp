@@ -31,6 +31,8 @@ export const ONE_HUNDRED_BIG_NUMBER = new BigNumber(100)
 // ∴ when the amount is < 5 the order will be considered filled.
 export const ORDER_FILLED_FACTOR = new BN(10000) // 0.01%
 
+export const MINIMUM_ALLOWANCE_DECIMALS = 12
+
 export const APP_NAME = 'fuse'
 
 export const ETHER_PNG =
@@ -103,7 +105,6 @@ export const MEDIA = {
 
 export const ELLIPSIS = '...'
 
-// TODO: should this be on loadConfig?
 let infuraId
 if (process.env.INFURA_ID) {
   infuraId = process.env.INFURA_ID
@@ -115,6 +116,7 @@ if (process.env.INFURA_ID) {
 }
 
 export const INFURA_ID = infuraId
+export const WALLET_CONNECT_BRIDGE = process.env.WALLET_CONNECT_BRIDGE || CONFIG.walletConnect.bridge
 
 let ethNodeUrl
 if (process.env.ETH_NODE_URL) {
