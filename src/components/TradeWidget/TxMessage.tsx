@@ -1,21 +1,24 @@
 import React, { useMemo } from 'react'
-import { formatTimeInHours, logDebug } from 'utils'
+import { logDebug, formatDateLocaleShortTime } from 'utils'
 import { useFormContext } from 'react-hook-form'
 import { TokenDetails } from 'types'
 import styled from 'styled-components'
 import { TradeFormData } from '.'
 import { displayTokenSymbolOrLink, symbolOrAddress } from 'utils/display'
+
 import { HelpTooltip, HelpTooltipContainer } from 'components/Tooltip'
+
 import useSafeState from 'hooks/useSafeState'
-import { EllipsisText } from 'components/Layout'
-import { SwapIcon } from './SwapIcon'
 import { usePriceEstimationInOwl, useWETHPriceInOwl } from 'hooks/usePriceEstimation'
 import BigNumber from 'bignumber.js'
 import { ZERO_BIG_NUMBER } from 'const'
 
 import alertIcon from 'assets/img/alert.svg'
 import { useGasPrice } from 'hooks/useGasPrice'
-import { DEFAULT_GAS_PRICE, calcMinTradableAmountInOwl } from 'utils/minFee'
+import { useMinTradableAmountInOwl } from 'hooks/useMinTradableAmountInOwl'
+import { DEFAULT_GAS_PRICE, ROUND_TO_NUMBER, roundToNext } from 'utils/minFee'
+import { parseAmount, formatAmount } from '@gnosis.pm/dex-js'
+import { SwapPrice } from 'components/common/SwapPrice'
 
 interface TxMessageProps {
   sellToken: TokenDetails
@@ -70,43 +73,37 @@ const OrderValidityTooltip: React.FC = () => (
   </HelpTooltipContainer>
 )
 
-interface SimpleDisplayPriceProps extends Omit<TxMessageProps, 'networkId'> {
+interface SimpleDisplayPriceProps {
   price: string
   priceInverse: string
+  baseToken: TokenDetails
+  quoteToken: TokenDetails
 }
 
 export const SimpleDisplayPrice: React.FC<SimpleDisplayPriceProps> = ({
   price,
   priceInverse,
-  sellToken,
-  receiveToken,
+  baseToken,
+  quoteToken,
 }) => {
-  // true = direct
-  // false = indirect
-  const [showPrice, setShowPrice] = useSafeState(true)
-  const swapPrices = (): void => setShowPrice(state => !state)
-
-  const displaySellToken = displayTokenSymbolOrLink(sellToken)
-  const displayReceiveToken = displayTokenSymbolOrLink(receiveToken)
-  const sellTokenTitle = symbolOrAddress(sellToken)
-  const receiveTokenTitle = symbolOrAddress(receiveToken)
+  const [isPriceInverted, setPriceInverted] = useSafeState(false)
+  const swapPrices = (): void => setPriceInverted((state) => !state)
 
   return (
     <div>
-      <span>{showPrice ? priceInverse : price}</span>{' '}
-      <EllipsisText as="strong" title={showPrice ? sellTokenTitle : receiveTokenTitle}>
-        {showPrice ? displaySellToken : displayReceiveToken}
-      </EllipsisText>
-      <small> per </small>
-      <EllipsisText as="strong" title={showPrice ? receiveTokenTitle : sellTokenTitle}>
-        {showPrice ? displayReceiveToken : displaySellToken}
-      </EllipsisText>
-      <SwapIcon swap={swapPrices} />
+      <span>{isPriceInverted ? priceInverse : price}</span>{' '}
+      <SwapPrice
+        baseToken={baseToken}
+        quoteToken={quoteToken}
+        isPriceInverted={isPriceInverted}
+        onSwapPrices={swapPrices}
+        showBaseToken
+      />
     </div>
   )
 }
 
-const Warning = styled.p`
+const Warning = styled.div`
   position: relative;
   display: flex;
   background: var(--color-background-deleteOrders);
@@ -114,7 +111,11 @@ const Warning = styled.p`
   padding: 1rem;
   border-radius: 0.3em;
 
-  > span {
+  a {
+    color: var(--color-text-active);
+  }
+
+  > div {
     width: 94%;
   }
 
@@ -136,6 +137,9 @@ interface LowVolumeResult {
   isLowVolume?: boolean
   difference?: BigNumber
   minAmount?: BigNumber
+  roundedUpAmount?: BigNumber
+  roundedUpTo?: number
+  roundedUpAmountInOwl?: BigNumber
 }
 
 const useLowVolumeAmount = ({ sellToken, sellTokenAmount, networkId }: LowVolumeParams): LowVolumeResult => {
@@ -149,13 +153,23 @@ const useLowVolumeAmount = ({ sellToken, sellTokenAmount, networkId }: LowVolume
 
   const gasPrice = useGasPrice({ defaultGasPrice: DEFAULT_GAS_PRICE, gasPriceLevel: 'fast' })
 
+  const minTradableAmountInOwl = useMinTradableAmountInOwl(networkId)
+
   return useMemo(() => {
+    if (priceEstimation !== null && priceEstimation.isZero()) {
+      // no price data for token
+      logDebug('No priceEstimation data for', sellToken.symbol, 'in OWL')
+
+      return { isLoading: false, isLowVolume: false }
+    }
+
     if (
       isPriceLoading ||
       isWETHPriceLoading ||
       priceEstimation === null ||
       wethPriceInOwl === null ||
-      gasPrice === null
+      gasPrice === null ||
+      minTradableAmountInOwl === null
     ) {
       return { isLoading: true }
     }
@@ -163,10 +177,12 @@ const useLowVolumeAmount = ({ sellToken, sellTokenAmount, networkId }: LowVolume
     logDebug('priceEstimation of', sellToken.symbol, 'in OWL', priceEstimation.toString(10))
     logDebug('WETH price in OWL', wethPriceInOwl.toString(10))
 
-    const minTradableAmountInOwl = calcMinTradableAmountInOwl({ gasPrice, ethPriceInOwl: wethPriceInOwl })
+    const minTradableAmountInOwlRoundedUp = roundToNext(minTradableAmountInOwl)
 
     const minTradableAmountPerToken = minTradableAmountInOwl.dividedBy(priceEstimation)
     const isLowVolume = minTradableAmountPerToken.isGreaterThan(sellTokenAmount)
+
+    const roundedUpAmount = minTradableAmountInOwlRoundedUp.dividedBy(priceEstimation)
 
     const difference = isLowVolume ? minTradableAmountPerToken.minus(sellTokenAmount) : ZERO_BIG_NUMBER
 
@@ -174,10 +190,30 @@ const useLowVolumeAmount = ({ sellToken, sellTokenAmount, networkId }: LowVolume
       isLowVolume,
       difference: difference.toString(10),
       minAmount: minTradableAmountPerToken.toString(10),
+      minAmountInOWL: minTradableAmountInOwl.toString(10),
       gasPrice,
+      roundedUpAmount: roundedUpAmount.toString(10),
+      roundedUpAmountInOwl: minTradableAmountInOwlRoundedUp.toString(10),
     })
-    return { isLowVolume, difference, isLoading: false, minAmount: minTradableAmountPerToken }
-  }, [isPriceLoading, priceEstimation, sellToken.symbol, sellTokenAmount, gasPrice, isWETHPriceLoading, wethPriceInOwl])
+    return {
+      isLowVolume,
+      difference,
+      isLoading: false,
+      minAmount: minTradableAmountPerToken,
+      roundedUpAmount: roundedUpAmount,
+      roundedUpTo: ROUND_TO_NUMBER,
+      roundedUpAmountInOwl: minTradableAmountInOwlRoundedUp,
+    }
+  }, [
+    isPriceLoading,
+    priceEstimation,
+    sellToken.symbol,
+    sellTokenAmount,
+    gasPrice,
+    isWETHPriceLoading,
+    wethPriceInOwl,
+    minTradableAmountInOwl,
+  ])
 }
 
 export const TxMessage: React.FC<TxMessageProps> = ({ sellToken, receiveToken, networkId }) => {
@@ -194,14 +230,37 @@ export const TxMessage: React.FC<TxMessageProps> = ({ sellToken, receiveToken, n
   const displaySellToken = displayTokenSymbolOrLink(sellToken)
   const displayReceiveToken = displayTokenSymbolOrLink(receiveToken)
 
-  const { isLoading, isLowVolume } = useLowVolumeAmount({ sellToken, networkId, sellTokenAmount })
+  const {
+    isLoading,
+    isLowVolume,
+    roundedUpAmount: recommendedAmount,
+    roundedUpAmountInOwl: roundedAmountInUSD,
+  } = useLowVolumeAmount({
+    sellToken,
+    networkId,
+    sellTokenAmount,
+  })
+
+  const { formattedAmount = '', amountInUSD = '' } = useMemo<{ formattedAmount?: string; amountInUSD?: string }>(() => {
+    if (!recommendedAmount || !roundedAmountInUSD) return {}
+
+    const parsedAmount = parseAmount(recommendedAmount.toString(10), sellToken.decimals)
+    const parseAmountInUSD = parseAmount(roundedAmountInUSD.toString(10), 1)
+
+    if (!parsedAmount || !parseAmountInUSD) return {}
+
+    const amountFull = formatAmount({ amount: parsedAmount, precision: sellToken.decimals, decimals: 2 })
+    const amountInUSD = formatAmount({ amount: parseAmountInUSD, precision: 1 })
+
+    return { formattedAmount: amountFull, amountInUSD }
+  }, [recommendedAmount, roundedAmountInUSD, sellToken.decimals])
 
   return (
     <TxMessageWrapper>
       <div className="intro-text">
         <div>Carefully review the information below to make sure everything looks correct.</div>
       </div>
-      <p>
+      <div>
         How is the order executed?
         <a className="showMoreAnchor" onClick={(): void => showOrderHelp(!orderHelpVisible)}>
           {orderHelpVisible ? '[-] Show less...' : '[+] Show more...'}
@@ -232,7 +291,7 @@ export const TxMessage: React.FC<TxMessageProps> = ({ sellToken, receiveToken, n
             </p>
           </>
         )}
-      </p>
+      </div>
       <div className="message">
         {/* Details */}
         <div className="sectionTitle">
@@ -251,12 +310,7 @@ export const TxMessage: React.FC<TxMessageProps> = ({ sellToken, receiveToken, n
         <div className="sectionTitle">
           <strong>Prices</strong>
         </div>
-        <SimpleDisplayPrice
-          receiveToken={receiveToken}
-          sellToken={sellToken}
-          price={price}
-          priceInverse={priceInverse}
-        />
+        <SimpleDisplayPrice baseToken={receiveToken} quoteToken={sellToken} price={price} priceInverse={priceInverse} />
 
         {/* Order Validity */}
 
@@ -264,27 +318,35 @@ export const TxMessage: React.FC<TxMessageProps> = ({ sellToken, receiveToken, n
           <strong>Order Validity Details</strong> <HelpTooltip tooltip={<OrderValidityTooltip />} />
         </div>
         <div>
-          Starts: <span>{formatTimeInHours(validFrom || 0, 'Now')}</span>
+          Starts: <span>{validFrom ? formatDateLocaleShortTime(+validFrom) : 'Now'}</span>
         </div>
         <div>
-          Expires: <span>{formatTimeInHours(validUntil || 0, 'Never')}</span>
+          Expires: <span>{validUntil ? formatDateLocaleShortTime(+validUntil) : 'Never'}</span>
         </div>
       </div>
       {!isLoading && isLowVolume && (
-        // TODO: needs article URL
         <Warning>
-          <span>
-            This is a low volume order. Please keep in mind that solvers may not include your order if it does not
-            generate enough fees to pay their running costs. Learn more{' '}
-            <a
-              href="https://docs.gnosis.io/protocol/docs/introduction1/#minimum-order"
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              here
-            </a>
-            .
-          </span>
+          <div>
+            <p>
+              This is a low volume order. We recommend selling at least{' '}
+              <strong>
+                {formattedAmount} {symbolOrAddress(sellToken)}
+              </strong>{' '}
+              (approximately <strong>${amountInUSD}</strong>) of the token.
+            </p>
+            <p>
+              Please keep in mind that solvers may not include your order if it does not generate enough fees to pay
+              their running costs. Learn more{' '}
+              <a
+                href="https://docs.gnosis.io/protocol/docs/faq#minimum-order"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                here
+              </a>
+              .
+            </p>
+          </div>
           <img className="alert" src={alertIcon} />
         </Warning>
       )}

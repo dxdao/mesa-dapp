@@ -68,6 +68,8 @@ export const PRICE_ESTIMATION_PRECISION = 5
 // The prices on the contract will update at max once every batch, which is 5min long
 export const PRICES_CACHE_TIME = 60 // in seconds
 
+export const ORDERBOOK_DATA_FETCH_DEBOUNCE_TIME = 200
+
 export const MEDIA = {
   MOBILE_LARGE_PX: 500,
   tinyScreen: '320px',
@@ -156,10 +158,9 @@ export const STORAGE_KEY_DISABLED_TOKENS_ADDRESSES = 'disabledTokens'
 export const TRADES_LOCAL_STORAGE_KEY = 'TRADES_PER_ACCOUNT'
 
 const LIQUIDITY_TOKEN_LIST_VALUES = process.env.LIQUIDITY_TOKEN_LIST || 'USDT,TUSD,USDC,PAX,GUSD,DAI,sUSD'
-export const LIQUIDITY_TOKEN_LIST = new Set(LIQUIDITY_TOKEN_LIST_VALUES.split(',').map(symbol => symbol.trim()))
+export const LIQUIDITY_TOKEN_LIST = new Set(LIQUIDITY_TOKEN_LIST_VALUES.split(',').map((symbol) => symbol.trim()))
 export const INPUT_PRECISION_SIZE = 6
-export const VALID_UNTIL_DEFAULT = '2880'
-export const VALID_FROM_DEFAULT = '30'
+
 export const WETH_ADDRESS_MAINNET = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
 export const WETH_ADDRESS_RINKEBY = '0xc778417E063141139Fce010982780140Aa0cD5Ab'
 export const ORDER_BOOK_HOPS_DEFAULT = 2
