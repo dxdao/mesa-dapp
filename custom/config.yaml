@@ -18,6 +18,9 @@ tcr:
       - networkId: 4
         contractAddress: '0xBb840456546496E7640DC09ba9fE06E67C157E1b'
 
+      - networkId: 1
+        contractAddress: '0x13b47D3311177480E45F223D6f34E1dd5B03b55E'
+
 # Price estimation/orderbook graph
 dexPriceEstimator:
   type: 'dex-price-estimator' # choices: dex-price-estimator
