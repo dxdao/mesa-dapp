@@ -2,7 +2,7 @@ appId: 2
 
 name: Mesa.eth
 
-logoPath: './src/assets/img/logo.svg'
+logoPath: './custom/assets/img/logo.svg'
 
 templatePath: './src/html/index.html'
 
@@ -18,40 +18,6 @@ tcr:
       - networkId: 4
         contractAddress: '0xBb840456546496E7640DC09ba9fE06E67C157E1b'
 
-      - networkId: 1
+      - networkId: 100
+        listId: 1
         contractAddress: '0x13b47D3311177480E45F223D6f34E1dd5B03b55E'
-
-# Price estimation/orderbook graph
-dexPriceEstimator:
-  type: 'dex-price-estimator' # choices: dex-price-estimator
-  config:
-    - networkId: 1
-      url_production: https://dex-price-estimator.gnosis.io
-      url_develop: https://price-estimate-mainnet.dev.gnosisdev.com
-
-    - networkId: 4
-      url_production: https://dex-price-estimator.rinkeby.gnosis.io
-      url_develop: https://price-estimate-rinkeby.dev.gnosisdev.com
-
-# Subgraph abstraction, used for getting the last price
-theGraphApi:
-  type: 'the-graph' # choices: the-graph
-  config:
-    - networkId: 1
-      url: https://api.thegraph.com/subgraphs/name/gnosis/protocol
-
-    - networkId: 4
-      url: https://api.thegraph.com/subgraphs/name/gnosis/protocol-rinkeby
-
-# Eth node config
-defaultProviderConfig:
-  type: 'infura' # Choices: infura | url
-  config:
-    # It'll be appended to `infuraEndpoint`
-    infuraId: 607a7dfcb1ad4a0b83152e30ce20cfc5
-    infuraEndpoint: wss://mainnet.infura.io/ws/v3/
-  #
-  # Example for type `url`
-  # type: 'url'
-  # config:
-  #   ethNodeUrl: <local eth node>
